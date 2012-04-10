@@ -30,4 +30,7 @@ alist.xcuserdatad
 #swyp specific
 swyp.js
 swypClient.js
+<<<<<<< HEAD
 secrets.coffee
+=======
+>>>>>>> 2e0c47aaba6d4f987be487177bc136406bccde8c
