@@ -14,12 +14,16 @@
       vis: undefined
       force: d3.layout.force()
       instructions:
-        default: "Drag the content onto the person you want to send it to."
+        receive: "This is where you receive content!"
+        default: "Drop the content on whom you'd like to send it to."
         drop:    "Drop to send."
         sending: "Sending now..."
+        signIn: "go to d.swyp.us for a demo account, then refresh"
+        refresh: "you must refresh to get another!"
       dataToSend: undefined #the data to be sent on swyp out
       pending: [] #any pending content for receipt
       canSwypIn: true #turn off to disable swyp ins
+      canSwypOut: true #if embedded, then swyp out, otherwise is recieve window
 
     isTouchDevice = "ontouchstart" of document.documentElement
 
@@ -28,12 +32,13 @@
 
     # (re)display the bubbles, centered at the provided coordinates
     swypUI.showBubblesAt = (ex, ey) ->
-      $('#instructions').show()
-      @vis.attr "class", "visible"
-      @isVisible = true
-      @x = ex
-      @y = ey
-      @force.start()
+      if swypUI.canSwypOut == true
+        $('#instructions').show()
+        @vis.attr "class", "visible"
+        @isVisible = true
+        swypUI.x = ex
+        swypUI.y = ey
+        @force.start()
 
     # collision detection between an element and a touch/mouse x, y coord
     collides = (el, ex, ey) ->
@@ -44,44 +49,41 @@
     friendClass = (d) -> if d.friend then "friend" else "stranger"
 
     # see if mouse/finger drag collides with a person bubble
-    checkForCollisions = (ex, ey, triggerSwypOut) ->
+    checkForCollisions = (ex, ey) ->
       collisionCount = 0
       swypUI.node.each (d, i) ->
         collision = collides(this, ex, ey)
         collisionCount += 1 if collision
+        d.collision = collision
         d3.select(this).attr "class", (if collision then "hovered" else friendClass(d))
 
-        # this is how swyp outs are triggered!
-        if collision and triggerSwypOut then swypUI.swypOut d
-
       # update the instructions if dragging over a person
-      $("#instructions").text swypUI.instructions[(if (collisionCount > 0) then "drop" else "default")]
+      property = (if (window.swyp.isSignedIn == false) then "signIn" else if (collisionCount > 0) then "drop" else "default")
+      $("#instructions").text swypUI.instructions[property]
+    
+    swypOutSelected = ->
+      # this is how swyp outs are triggered!
+      swypUI.node.each (d, i)->
+        if d.collision
+          d.previewImageURL = $("#preview")?[0]?.src
+          #d.b64Preview = swypUI.getB64FromImgElement $("#preview")[0]
+          swypUI.swypOut d
 
     swypUI.swypOut = (d)->
       imageJPEGType = "image/jpeg"
       imagePNGType = "image/png"
- 
-      console.log d
-      # alex, this is where you put relevant swyp out code
-      pngFile = {
-        contentURL : "http://swyp.us/guide/setupPhotos/setup1.png"
-        contentMIME : imagePNGType
-      }
-
-      jpegFile = {
-        contentURL : "http://fluid.media.mit.edu/people/natan/media/swyp/swyp.jpg"
-        contentMIME : imageJPEGType
-      }
-
-      base64PreviewImage = "/9j/4AAQSkZJRgABAgAAZABkAAD/7AARRHVja3kAAQAEAAAADQAA/+4ADkFkb2JlAGTAAAAAAf/bAIQAExAQGBEYJhcXJjAlHiUwLCUkJCUsOzMzMzMzO0M+Pj4+Pj5DQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQwEUGBgfGx8lGBglNCUfJTRDNCkpNENDQ0AzQENDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0ND/8AAEQgAOAAoAwEiAAIRAQMRAf/EAHoAAAEFAQEAAAAAAAAAAAAAAAACAwQGBwEFAQADAQEAAAAAAAAAAAAAAAAAAgMBBBAAAgEDAgMGBAcAAAAAAAAAAQIAERIDITFBsQRRYZEiMgWh0UJycYFSYpITFBEAAwACAgMBAAAAAAAAAAAAAAERIQJREkFSA4H/2gAMAwEAAhEDEQA/AKvLd0/snQ5caM7UJ3Fe6VQrwmmp5EQWg+VfGkb6puRwNGlaqVzL7J0SoSpqwFQLp4PXe25eiKkgnG4uR+75iaLRSNRrIXV+348mF1YkqVOhPdJ6dtXl1DbRrChnNBwhOiE6iAoiaemMtjTX6V5TMiJqOJLsaV4BeUT6eBtRkmh18IrI1+JtNlblHTiFdYnKKYm+1uUj5KGWU0hFCE64QFRz/RlH1t/IyYPcWvLnGrXAVBPZUHhQVB4AbRWHrXAvtLWooZhpVrhq2+loC9/5zG36mxckI58wFf7G1/efnOjNmatHc0FT5jHOn6xsC2BQwrdQ7HVT8LfjHz1+RVqcejUoWbRrbfVp5j5d9PVtB31D9POYHfgTCTm6+putqWvu2HqCgagcLa105whXwEXJDEcTKqKy21LUq11DT9O2xhCO5MiIkr7i+O0BRRQB6jwt27PT5h9VT2yM+UuioQBbca/dyHj+MIRF0uBn2g1CEJQU/9k="
       
-      swypTypeGroups = [pngFile, jpegFile]
-
-      #alert "(switch userNmae with userID) DID UPDATE: TRIGGERING SWYP OUT TO: #{JSON.stringify(d)} with data: #{JSON.stringify(swypUI.dataToSend)}"
-      swyp.makeSwypOut d.userID, base64PreviewImage, swypTypeGroups
+      base64PreviewImage = d.b64Preview
+      previewImageURL = d.previewImageURL
+           
+      #todo: this part is a bit messy, we could add the pngs, etc
+      swypTypeGroups = []
+      swypTypeGroups = swypTypeGroups.concat(swypUI.pendingTypeGroups)
+      #swypTypeGroups.concat(pngFile)
+      console.log "typeGroups: ", swypTypeGroups
+      swyp.makeSwypOut d.userID, base64PreviewImage, previewImageURL, swypTypeGroups
 
     swypUI.hideSwyp = ->
-      console.log 'hiding swyp'
       @node.attr "class", friendClass
       @vis.attr "class", "hidden"
       $("#preview").hide()
@@ -122,12 +124,10 @@
           xy = realTouches(this)
           $("#preview").show()
           positionPreview xy[0], xy[1]
-          checkForCollisions xy[0], xy[1], false
-      ).on(events[2], ->
+          checkForCollisions xy[0], xy[1]
+      ).on(events[2], (e) ->
         if swypUI.isVisible
-          xy = realTouches(this)
-          # trigger swyp out on the collided people
-          checkForCollisions xy[0], xy[1], true
+          swypOutSelected()
           swypUI.hideSwyp()
       )
 
@@ -136,24 +136,35 @@
       console.log "RECEIVED: " + JSON.stringify(event.data)
       swypUI.sourceWindow = event.source
       eType = event.data.e
-      touches = event.data.touches
-      ex = touches[0] - 100
-      ey = touches[1] - 100
-      console.log eType
-
       if eType is "dragstart"
-        console.log "show bubbles"
+        swypUI.canSwypOut = true
+        touches = event.data.touches
+        ex = touches[0] - 100
+        ey = touches[1] - 100
+
         positionPreview ex, ey
-        swypUI.dataToSend = event.data
+        #swypUI.dataToSend = event.data
         $("#preview").attr "src", event.data.img
+        swypUI.pendingTypeGroups = event.data.typeGroups
+        console.log "Pending types", swypUI.pendingTypeGroups
         swypUI.showBubblesAt ex, ey
+        swypUI.contentURLs = {png: event.data.img}
+
+    swypUI.getB64FromImgElement = (img) =>
+      canvas = document.createElement("canvas")
+      canvas.width = img.width
+      canvas.height = img.height
+      ctx = canvas.getContext("2d")
+      newImg = new Image()
+      newImg.src = img.src
+      ctx.drawImage(newImg, 0, 0)
+      dataURL = canvas.toDataURL("image/png")
+      return dataURL.replace(/^data:image\/(png|jpg);base64,/, "")
 
     # setup the bubbles
     swypUI.setupBubbles = (json)->
       if not @body then @body = d3.select("body")
-      
-      if @vis then $('svg').remove() # hack! BAD
-      @vis = @body.append("svg:svg").attr("class", "hidden")
+      @vis = d3.select("svg")
 
       @force.nodes(json.nodes).links(json.links).gravity(0)
            .distance(100).charge(-1000).start()
@@ -169,33 +180,42 @@
 
       @link.exit().remove()
 
-      @node = @vis.selectAll("g.node").data(json.nodes)
-      @node.enter()
-           .append("svg:g").attr("class", (d) -> friendClass)
+      @node = @vis.selectAll("g").data json.nodes, (d) ->
+                return d.publicID
+          
+      #.filter((d, i) -> i isnt 0) 
+      userCell = @node.enter()
+        .append("svg:g")
 
-      @node.filter((d, i) -> i isnt 0)
-        .append("svg:rect")
-          .attr("class", "rect")
-          .attr("x", "-16px")
-          .attr("y", "-20px")
-          .attr("width", "200px")
-          .attr("height", "40px")
-      # the user avatar
-      @node.append("svg:image")
-          .attr("class", "circle")
-          .attr("xlink:href", (d) -> d.userImageURL)
-          .attr("x", "-16px")
-          .attr("y", "-20px")
-          .attr("width", "40px")
-          .attr("height", "40px")
-      # the user name
-      @node.append("svg:text")
-          .attr("class", "nodetext")
-          .attr("dx", 32)
-          .attr("dy", ".35em").text (d) -> d.userName
+      userCell
+        .attr("class", (d) -> friendClass)
+        .attr("width", "200px")
+        .attr("height", "40px")
+        .attr("transform", "translate(#{@x},#{@y})")
+      
+      userCell.append("svg:rect")
+        .attr("class", "rect")
+        .attr("x", "-16px")
+        .attr("y", "-20px")
+        .attr("width", "200px")
+        .attr("height", "40px")
+
+      userCell.append("svg:image")
+        .attr("class", "circle")
+        .attr("xlink:href", (d, i) -> if d.userImageURL then d.userImageURL else if i == 0 then '/map.png' else null)
+        .attr("x", "-16px")
+        .attr("y", "-20px")
+        .attr("width", "40px")
+        .attr("height", "40px")
+
+      userCell.append("svg:text")
+        .attr("class", "nodetext")
+        .attr("dx", 32)
+        .attr("dy", ".35em").text (d) -> d.userName
 
       @node.exit().remove()
 
+      
       @force.on "tick", (e) =>
         @resize()
         @link.attr("x1", (d) -> d.source.x)
@@ -206,13 +226,11 @@
         @node.attr "transform", (d) =>
           # only translate the center node (index 0), the rest auto-follow
           if d.index is 0
-            damper = 0.1
+            damper = 0.15
             d.x = if @x then d.x + (@x - d.x) * (damper + 0.71) * e.alpha else 400
             d.y = if @y then d.y + (@y - d.y) * (damper + 0.71) * e.alpha else 400
           "translate(#{d.x},#{d.y})"
 
-
-    # Ethan, cool thanks, this is how you add a new incoming swyp!
     # expects an object: {objectID: 1, 
     #                     userName:'Ethan', 
     #                     userImageURL: 'http://', # here's a gravitar link or whatever of the user
@@ -229,8 +247,10 @@
         swypUI.pending.push item
         $elem = $('<a/>').addClass('swyp_thumb').attr('id', "obj_#{item.objectID}")
                                                 .attr('href', item.fullURL)
-        $img = $('<img/>').attr('src', item.thumbnailURL)
+        $img = $('<img/>').attr('class', 'thumb_image').attr('src', item.thumbnailURL)
+        $userImg = $('<img/>').attr('class', 'user_image').attr('src', item.userImageURL)
         $span = $('<span/>').addClass('username').text(item.userName)
+        $span.append $userImg
         $elem.append $img
         $elem.append $span
         $('body').append $elem
@@ -246,31 +266,43 @@
 
         offset_base = Math.floor(i/4)
         offset_sign = if offset_base % 2 is 0 then -1 else 1
-        offset = offset_sign*(60+Math.floor(Math.random()*180))
+        offset = offset_sign*(60+Math.floor(Math.random()*60))
         $elem.css("margin-#{offset_margin}", "+=#{offset}")
+       
+        window.setInterval (=>
+          $elem.fadeOut()), 10 * 1000
 
         # bind events
         events = eventsForDevice
         $elem.on(events[2], (e)->
+          e.stopPropagation()
           if confirm "Accept content from #{item.userName}?"
             #swyp dataAvailableCallback set on initialize
             console.log "accepting from item #{item}"
             swyp.makeSwypIn item.objectID
-          $(this).hide() # either way, hide the content afterwards
-        ).on('click', (e)-> e.preventDefault())
-
-    swypUI.demoObj = (fakeID)->
-      fakeID ?= Math.floor(Math.random()*101)
-      {objectID: fakeID, userName: 'Ethan Sherbondy', thumbnailURL: 'https://www.google.com/logos/2012/doisneau12-sr.png', fullURL: 'https://www.google.com/logos/2012/doisneau12-hp.jpg'}
+          $(this).fadeOut() # either way, hide the content afterwards
+          $(this).off(events[2])
+        ).on('click', (e)-> e.preventDefault()
+        ).on(events[0], (e)-> e.stopPropagation())
 
     swypUI.initialize = (json)->
+      if swypUI.canSwypOut == false || window.swyp.isSignedIn == false
+        $("#instructions").text (if (window.swyp.isSignedIn == false) then swypUI.instructions["signIn"] else swypUI.instructions["receive"])
+        $('#instructions').show()
+        $('#login_button').show()
+      else
+        $("#instructions").text (swypUI.instructions["receive"])
+        $('#instructions').show()
+        $('#login_button').hide()
       window.addEventListener "message", @receiveMessage, false
-      $("#instructions").text @instructions["default"]
       swyp.dataAvailableCallback = (swypItem, err) =>
-        console.log "callbacking for swyp item#{swypItem}"
-        window.open swypItem.contentURL, '_blank'
+        console.log "data available callback for swyp item#{swypItem}"
+        window.location = swypItem.contentURL
+        $("#instructions").text (swypUI.instructions["refresh"])
+        $('#instructions').show()
+
+      @vis = d3.select("body").append("svg:svg").attr("class", "hidden")
       @setupBubbles json
       @registerEvents()
-      #@addPending @demoObj()
-
+    
     window.swypClient = swypUI
